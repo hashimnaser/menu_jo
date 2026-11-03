@@ -31,4 +31,34 @@ body {
     radial-gradient(ellipse at 8% 100%, rgba(249, 115, 22, 0.2), transparent 36%),
     linear-gradient(118deg, #1E293B 0%, #0F172A 68%, #020617 100%);
 }
+.restaurant-map-marker {
+  border: 0;
+  background: transparent;
+}
+.restaurant-map-marker span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  background: #f59e0b;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 35%);
+  transform: rotate(-45deg);
+}
+.restaurant-map-marker span::after {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0f172a;
+  content: "";
+}
+.leaflet-container {
+  z-index: 0;
+  font-family: inherit;
+}
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

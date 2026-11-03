@@ -1,14 +1,19 @@
-insert into public.restaurants (name, slug, description, rating, location, phone)
+insert into public.restaurants (
+  name, slug, description, rating, location, phone, latitude, longitude, google_maps_url
+)
 values
-  ('زاخو', 'zakho', 'شاورما ووجبات سريعة', 4.7, 'إربد', '962790000001'),
-  ('شاورمجي', 'shawarmaji', 'شاورما على أصولها', 4.5, 'إربد', '962790000002'),
-  ('تكا وشاورما', 'taka-wshawarma', 'مشاوي وشاورما', 4.8, 'عمّان', '962790000003')
+  ('زاخو', 'zakho', 'شاورما وسناكات', 4.7, 'إربد - شارع الثلاثين', '962788824411', 32.5372, 35.8540, 'https://maps.app.goo.gl/u1gkYoUH3Cbjxip56'),
+  ('شاورمجي', 'shawarmaji', 'شاورما وسناكات', 4.5, 'إربد - شارع الهاشمي', '962798544448', 32.5568, 35.8478, 'https://maps.app.goo.gl/fQDz7U2r6oCN9TiE8'),
+  ('تكا وشاورما', 'taka-wshawarma', 'شاورما ومشاوي', 4.8, 'إربد - شارع الثلاثين', '962786333387', 32.5380, 35.8535, 'https://maps.app.goo.gl/m8CgkY8gVxYYdmqk7')
 on conflict (slug) do update set
   name = excluded.name,
   description = excluded.description,
   rating = excluded.rating,
   location = excluded.location,
-  phone = excluded.phone;
+  phone = excluded.phone,
+  latitude = excluded.latitude,
+  longitude = excluded.longitude,
+  google_maps_url = excluded.google_maps_url;
 
 insert into public.categories (name, restaurant_id)
 select seed.name, restaurants.id
