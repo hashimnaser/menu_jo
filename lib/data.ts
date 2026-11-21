@@ -45,6 +45,11 @@ export type Restaurant = {
   area?: string | null;
   areaEn?: string | null;
   branches?: Branch[];
+  priceLevel?: number | null;
+  serviceTypes?: string[];
+  instagramUrl?: string | null;
+  facebookUrl?: string | null;
+  tiktokUrl?: string | null;
   cuisine: string[];
   cuisineEn?: (string | null)[];
   phoneNumbers?: string[];

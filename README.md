@@ -80,3 +80,7 @@ npm run dev     # http://localhost:3000
    The password is exchanged for a signed, HTTP-only admin cookie. The service
    role key is used only by the protected server API to publish restaurant
    data; it is never sent to the browser. Do not expose or commit these values.
+9. Run [`supabase/restaurant_page_enhancements.sql`](./supabase/restaurant_page_enhancements.sql)
+   to add restaurant service types and social links. The migration preserves
+   existing numeric price levels; the admin and restaurant page display them
+   as `$`, `$$`, or `$$$`.

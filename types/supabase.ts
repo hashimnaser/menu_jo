@@ -33,6 +33,10 @@ export type Database = {
           cuisine: string | null;
           cuisine_en: string | null;
           price_level: number | null;
+          service_types: string[];
+          instagram_url: string | null;
+          facebook_url: string | null;
+          tiktok_url: string | null;
           working_hours: Json;
           is_open_now: boolean;
           created_at: string;
@@ -60,6 +64,10 @@ export type Database = {
           cuisine?: string | null;
           cuisine_en?: string | null;
           price_level?: number | null;
+          service_types?: string[];
+          instagram_url?: string | null;
+          facebook_url?: string | null;
+          tiktok_url?: string | null;
           working_hours?: Json;
           is_open_now?: boolean;
           created_at?: string;
@@ -87,6 +95,10 @@ export type Database = {
           cuisine?: string | null;
           cuisine_en?: string | null;
           price_level?: number | null;
+          service_types?: string[];
+          instagram_url?: string | null;
+          facebook_url?: string | null;
+          tiktok_url?: string | null;
           working_hours?: Json;
           is_open_now?: boolean;
           created_at?: string;

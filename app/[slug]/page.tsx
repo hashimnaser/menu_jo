@@ -13,13 +13,30 @@ type Props = { params: { slug: string } };
 
 export const dynamic = "force-dynamic";
 
+const serviceLabels: Record<string, { ar: string; en: string }> = {
+  dine_in: { ar: "محلي", en: "Dine-in" },
+  takeaway: { ar: "تيك أوي", en: "Takeaway" },
+  delivery: { ar: "توصيل", en: "Delivery" },
+};
+
+function isSafeSocialUrl(value: string | null | undefined, domain: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      (url.hostname === domain || url.hostname.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+}
+
 async function getRestaurant(slug: string, locale: Locale = "ar"): Promise<Restaurant | null> {
   const supabase = createClient();
-  const [{ data, error }, coordinatesResult] = await Promise.all([
+  const [restaurantResult, coordinatesResult, enhancementsResult] = await Promise.all([
     supabase
       .from("restaurants")
       .select(
-        "id,name,name_ar,name_en,slug,description,description_en,logo,logo_url,cover_image,cover_url,rating,location,location_en,phone,whatsapp,cuisine,cuisine_en,created_at,categories(id,name,name_en,sort_order,restaurant_id,created_at,items(id,name_ar,name_en,description_ar,description_en,price,image_url,meal_type,is_available,category_id,created_at)),branches(id,branch_name_ar,branch_name_en,address_ar,address_en,latitude,longitude,google_maps_url,phone,whatsapp,working_hours,is_open,area_id,areas(id,name_ar,name_en,slug,city_id,cities(id,name_ar,name_en,slug)))",
+        "id,name,name_ar,name_en,slug,description,description_en,logo,logo_url,cover_image,cover_url,rating,location,location_en,phone,whatsapp,cuisine,cuisine_en,price_level,created_at,categories(id,name,name_en,sort_order,restaurant_id,created_at,items(id,name_ar,name_en,description_ar,description_en,price,image_url,meal_type,is_available,category_id,created_at)),branches(id,branch_name_ar,branch_name_en,address_ar,address_en,latitude,longitude,google_maps_url,phone,whatsapp,working_hours,is_open,area_id,areas(id,name_ar,name_en,slug,city_id,cities(id,name_ar,name_en,slug)))",
       )
       .eq("slug", slug)
       .maybeSingle(),
@@ -28,12 +45,25 @@ async function getRestaurant(slug: string, locale: Locale = "ar"): Promise<Resta
       .select("latitude,longitude,google_maps_url")
       .eq("slug", slug)
       .maybeSingle(),
+    supabase
+      .from("restaurants")
+      .select("service_types,instagram_url,facebook_url,tiktok_url")
+      .eq("slug", slug)
+      .maybeSingle(),
   ]);
 
+  const { data, error } = restaurantResult;
   if (error) {
     throw new Error(`Could not load restaurant "${slug}" from Supabase: ${error.message}`);
   }
   if (!data) return null;
+
+  const enhancementColumnsUnavailable =
+    enhancementsResult.error?.code === "42703" &&
+    /service_types|instagram_url|facebook_url|tiktok_url/.test(enhancementsResult.error.message);
+  if (enhancementsResult.error && !enhancementColumnsUnavailable) {
+    throw new Error(`Could not load restaurant enhancements "${slug}" from Supabase: ${enhancementsResult.error.message}`);
+  }
 
   const coordinatesUnavailable =
     coordinatesResult.error?.code === "42703" &&
@@ -98,6 +128,12 @@ async function getRestaurant(slug: string, locale: Locale = "ar"): Promise<Resta
     cuisineEn: data.cuisine ? [data.cuisine_en] : data.categories.map((category) => category.name_en),
     phoneNumbers,
     whatsapp: (primaryBranch?.whatsapp ?? data.whatsapp ?? phoneNumbers[0])?.replace(/\D/g, ""),
+    priceLevel: data.price_level,
+    serviceTypes: enhancementsResult.data?.service_types ??
+      (["zakho", "shawarmaji-hashemi"].includes(data.slug) ? ["dine_in", "takeaway", "delivery"] : []),
+    instagramUrl: enhancementsResult.data?.instagram_url,
+    facebookUrl: enhancementsResult.data?.facebook_url,
+    tiktokUrl: enhancementsResult.data?.tiktok_url,
     categories: data.categories.map((category) => ({
       title: localizedValue(locale, category.name, category.name_en),
       titleEn: category.name_en,
@@ -120,7 +156,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = createClient();
   const { data: restaurant, error } = await supabase
     .from("restaurants")
-    .select("name")
+    .select("name,name_ar,name_en,location,location_en")
     .eq("slug", params.slug)
     .maybeSingle();
 
@@ -129,9 +165,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
   if (!restaurant) return {};
 
+  const name = restaurant.name_ar ?? restaurant.name;
+  const location = restaurant.location ?? restaurant.location_en;
+  const locationText = location ? ` - ${location}` : "";
   return {
-    title: { absolute: `منيو مطعم ${restaurant.name} | الأسعار والتقييمات - MenuJo` },
-    description: `استكشف منيو مطعم ${restaurant.name} كاملاً مع الأسعار المحدثة وتقييمات العملاء عبر منصة MenuJo.`,
+    title: { absolute: `منيو وأسعار ${name}${locationText} | MenuJo` },
+    description: `تصفح منيو وأسعار ${name}${locationText}، وتعرّف على الأطباق وطرق التواصل وموقع المطعم عبر MenuJo.`,
   };
 }
 
@@ -145,7 +184,14 @@ export default async function MenuPage({ params }: Props) {
     "@type": "Restaurant",
     name: r.name,
     servesCuisine: r.cuisine,
-    address: { "@type": "PostalAddress", addressLocality: r.city, addressCountry: "JO" },
+    telephone: r.phoneNumbers?.[0],
+    priceRange: "$".repeat(Math.max(1, Math.min(3, r.priceLevel ?? 1))),
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: r.area ?? r.city,
+      addressRegion: r.city.split(" - ")[0],
+      addressCountry: "JO",
+    },
     hasMenu: {
       "@type": "Menu",
       hasMenuSection: r.categories.map((c) => ({
@@ -161,6 +207,14 @@ export default async function MenuPage({ params }: Props) {
     },
   };
   const mapUrl = getRestaurantMapUrl(r);
+  const priceRange = "$".repeat(Math.max(1, Math.min(3, r.priceLevel ?? 1)));
+  const socialLinks = [
+    { href: r.instagramUrl, domain: "instagram.com", label: "Instagram", icon: "ig" },
+    { href: r.facebookUrl, domain: "facebook.com", label: "Facebook", icon: "f" },
+    { href: r.tiktokUrl, domain: "tiktok.com", label: "TikTok", icon: "♪" },
+  ].filter((social): social is typeof social & { href: string } =>
+    isSafeSocialUrl(social.href, social.domain),
+  );
 
   return (
     <main className="min-h-screen px-5 pb-16">
@@ -168,17 +222,11 @@ export default async function MenuPage({ params }: Props) {
 
       <div className="mx-auto max-w-4xl">
         <section className="mt-3 overflow-hidden rounded-[2rem] border border-white/10 bg-surface shadow-xl shadow-black/20">
-          <div className="restaurant-art relative h-40 overflow-hidden sm:h-56">
+          <div className="restaurant-art relative flex min-h-40 items-center justify-center overflow-hidden bg-slate-950/70 sm:min-h-56">
             {r.coverImage ? (
-              <img src={r.coverImage} alt="" className="relative z-10 h-full w-full object-cover" />
+              <img src={r.coverImage} alt="" className="relative z-10 max-h-64 w-full object-contain sm:max-h-80" />
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                {r.logo ? (
-                  <img src={r.logo} alt={r.name} className="h-24 w-24 rounded-3xl border border-white/10 bg-slate-900/60 object-contain p-2 shadow-lg sm:h-32 sm:w-32" />
-                ) : (
-                  <span aria-hidden="true" className="text-6xl opacity-70">🍽️</span>
-                )}
-              </div>
+              <span aria-hidden="true" className="py-12 text-6xl opacity-70">🍽️</span>
             )}
           </div>
           <div className="p-4 sm:p-6">
@@ -189,12 +237,22 @@ export default async function MenuPage({ params }: Props) {
               whatsapp={r.whatsapp}
               locale={locale}
             />
-            <h1 className="mt-5 text-2xl font-bold tracking-tight text-white sm:text-3xl">{r.name}</h1>
-            {r.cuisine.length > 0 && (
-              <span className="mt-4 inline-flex max-w-full rounded-full border border-white/10 bg-slate-900/40 px-3 py-1.5 text-sm text-white/75">
-                {r.cuisine.join(" · ")}
-              </span>
-            )}
+            <div className="mt-5 flex flex-wrap items-center gap-4">
+              {r.logo && <img src={r.logo} alt={`شعار ${r.name}`} className="h-16 w-16 rounded-2xl border border-white/10 bg-slate-900/70 object-contain p-2 sm:h-20 sm:w-20" />}
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{r.name}</h1>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {r.cuisine.length > 0 && (
+                    <span className="inline-flex max-w-full rounded-full border border-white/10 bg-slate-900/40 px-3 py-1.5 text-sm text-white/75">
+                      {r.cuisine.join(" · ")}
+                    </span>
+                  )}
+                  <span className="inline-flex rounded-full border border-turmeric/25 bg-turmeric/10 px-3 py-1.5 text-sm font-bold tracking-widest text-turmeric" aria-label={locale === "ar" ? `مستوى السعر ${priceRange}` : `Price level ${priceRange}`}>
+                    {priceRange}
+                  </span>
+                </div>
+              </div>
+            </div>
             {r.tagline && (
               <p className="mt-3 line-clamp-2 max-w-2xl text-sm leading-6 text-white/75 sm:text-base">
                 {r.tagline}
@@ -224,6 +282,36 @@ export default async function MenuPage({ params }: Props) {
                 </p>
               )}
             </div>
+            {r.serviceTypes && r.serviceTypes.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2" aria-label={locale === "ar" ? "أنواع الخدمة" : "Service options"}>
+                {r.serviceTypes.map((service) => {
+                  const label = serviceLabels[service];
+                  if (!label) return null;
+                  return (
+                    <span key={service} className="rounded-full border border-white/10 bg-slate-900/50 px-3 py-1.5 text-xs font-medium text-white/75">
+                      {locale === "ar" ? label.ar : label.en}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            {socialLinks.length > 0 && (
+              <nav className="mt-4 flex items-center gap-2" aria-label={locale === "ar" ? "حسابات التواصل الاجتماعي" : "Social media"}>
+                {socialLinks.map((social) => (
+                  <a
+                    key={social.domain}
+                    href={social.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={social.label}
+                    title={social.label}
+                    className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-900/50 text-sm font-bold text-white/75 transition hover:border-turmeric/50 hover:text-turmeric"
+                  >
+                    {social.icon}
+                  </a>
+                ))}
+              </nav>
+            )}
           </div>
         </section>
 

@@ -25,6 +25,11 @@ const mealTypes = [
   "مشروبات",
   "أخرى",
 ] as const;
+const serviceOptions = [
+  { value: "dine_in", label: "محلي" },
+  { value: "takeaway", label: "تيك أوي" },
+  { value: "delivery", label: "توصيل" },
+] as const;
 
 type MenuItem = {
   name: string;
@@ -137,7 +142,9 @@ export default function RestaurantEditor({
     name: "", nameEn: "", slug: "", cuisine: "", cuisineEn: "", location: "", locationEn: "",
     latitude: "", longitude: "", googleMapsUrl: "",
     description: "", priceLevel: "1", coverImage: "", logo: "", whatsapp: "",
+    instagramUrl: "", facebookUrl: "", tiktokUrl: "",
   });
+  const [serviceTypes, setServiceTypes] = useState<string[]>(["dine_in", "takeaway", "delivery"]);
   const [phones, setPhones] = useState([""]);
   const [hours, setHours] = useState<WorkingHours>({});
   const [isOpenNow, setIsOpenNow] = useState(true);
@@ -188,6 +195,10 @@ export default function RestaurantEditor({
             google_maps_url: string | null;
             description: string | null;
             price_level: number | null;
+            service_types: string[] | null;
+            instagram_url: string | null;
+            facebook_url: string | null;
+            tiktok_url: string | null;
             cover_image: string | null;
             logo: string | null;
             phone: string | null;
@@ -248,7 +259,11 @@ export default function RestaurantEditor({
           coverImage: restaurant.cover_image ?? "",
           logo: restaurant.logo ?? "",
           whatsapp: restaurant.whatsapp ?? "",
+          instagramUrl: restaurant.instagram_url ?? "",
+          facebookUrl: restaurant.facebook_url ?? "",
+          tiktokUrl: restaurant.tiktok_url ?? "",
         });
+        setServiceTypes(restaurant.service_types ?? ["dine_in", "takeaway", "delivery"]);
         const phones = (restaurant.phone ?? "").split(/[,;|/\n]+/).map((phone) => phone.trim()).filter(Boolean);
         setPhones(phones.length ? phones : [""]);
         setHours(
@@ -362,6 +377,7 @@ export default function RestaurantEditor({
     const payload = {
       ...form,
       priceLevel: Number(form.priceLevel),
+      serviceTypes,
       latitude,
       longitude,
       googleMapsUrl: form.googleMapsUrl.trim(),
@@ -451,9 +467,32 @@ export default function RestaurantEditor({
             <label className={labelClass}>
               مستوى السعر
               <select value={form.priceLevel} onChange={(event) => update("priceLevel", event.target.value)} className={fieldClass}>
-                <option value="1">$</option><option value="2">$$</option><option value="3">$$$</option>
+                <option value="1">$ — اقتصادي</option><option value="2">$$ — متوسط</option><option value="3">$$$ — مرتفع</option>
               </select>
             </label>
+            <fieldset className="rounded-xl border border-white/10 p-4">
+              <legend className="px-2 text-sm font-medium text-slate-200">أنواع الخدمة</legend>
+              <div className="mt-2 flex flex-wrap gap-4">
+                {serviceOptions.map((service) => (
+                  <label key={service.value} className="flex items-center gap-2 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={serviceTypes.includes(service.value)}
+                      onChange={(event) => setServiceTypes((current) =>
+                        event.target.checked
+                          ? [...current, service.value]
+                          : current.filter((value) => value !== service.value),
+                      )}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    {service.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <Field label="رابط إنستغرام" value={form.instagramUrl} onChange={(v) => update("instagramUrl", v)} type="url" dir="ltr" language="en" placeholder="https://instagram.com/..." />
+            <Field label="رابط فيسبوك" value={form.facebookUrl} onChange={(v) => update("facebookUrl", v)} type="url" dir="ltr" language="en" placeholder="https://facebook.com/..." />
+            <Field label="رابط تيك توك" value={form.tiktokUrl} onChange={(v) => update("tiktokUrl", v)} type="url" dir="ltr" language="en" placeholder="https://tiktok.com/@..." />
             <ImageUpload
               label="صورة الغلاف"
               value={form.coverImage}

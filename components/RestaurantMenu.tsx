@@ -141,12 +141,6 @@ export default function RestaurantMenu({
                       decoding="async"
                       className="h-full w-full object-cover"
                     />
-                    <span aria-hidden="true" className="absolute bottom-1 left-1 grid h-6 w-6 place-items-center rounded-full bg-black/65 text-white">
-                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2">
-                        <circle cx="10.8" cy="10.8" r="6.8" />
-                        <path d="m16 16 4.5 4.5M10.8 7.5v6.6m-3.3-3.3h6.6" strokeLinecap="round" />
-                      </svg>
-                    </span>
                   </button>
                 )}
                 <div className="flex min-w-0 flex-1 items-start justify-between gap-3">

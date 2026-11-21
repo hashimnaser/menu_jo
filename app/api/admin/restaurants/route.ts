@@ -51,6 +51,10 @@ type RestaurantInput = {
   googleMapsUrl?: string;
   description: string;
   priceLevel: number;
+  serviceTypes: string[];
+  instagramUrl: string;
+  facebookUrl: string;
+  tiktokUrl: string;
   coverImage: string;
   logo: string;
   phones: string[];
@@ -99,6 +103,17 @@ function isGoogleMapsUrl(value: string) {
   }
 }
 
+function isSocialUrl(value: string, domain: string) {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      (url.hostname === domain || url.hostname.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+}
+
 function isValidCoordinates(latitude: unknown, longitude: unknown) {
   const hasLatitude = latitude !== undefined && latitude !== null;
   const hasLongitude = longitude !== undefined && longitude !== null;
@@ -118,6 +133,7 @@ function isValidInput(value: unknown): value is RestaurantInput {
   const requiredStrings = [
     "name", "nameEn", "slug", "cuisine", "cuisineEn", "location", "locationEn",
     "description", "coverImage", "logo", "whatsapp",
+    "instagramUrl", "facebookUrl", "tiktokUrl",
   ];
   if (requiredStrings.some((key) => typeof value[key] !== "string")) return false;
 
@@ -144,7 +160,13 @@ function isValidInput(value: unknown): value is RestaurantInput {
     !Array.isArray(input.categories) ||
     input.categories.length === 0 ||
     !Array.isArray(input.branches) ||
-    input.branches.length === 0
+    input.branches.length === 0 ||
+    !Array.isArray(input.serviceTypes) ||
+    input.serviceTypes.length === 0 ||
+    !input.serviceTypes.every((service) => ["dine_in", "takeaway", "delivery"].includes(String(service))) ||
+    !isSocialUrl(input.instagramUrl as string, "instagram.com") ||
+    !isSocialUrl(input.facebookUrl as string, "facebook.com") ||
+    !isSocialUrl(input.tiktokUrl as string, "tiktok.com")
   ) return false;
 
   for (const branch of input.branches) {
@@ -254,11 +276,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "معرّف المطعم غير صالح." }, { status: 400 });
     }
 
-    const { data: restaurant, error } = await supabase
+    const [{ data: restaurant, error }, enhancementsResult] = await Promise.all([
+      supabase
       .from("restaurants")
       .select("id,name,name_ar,name_en,slug,description,logo,logo_url,cover_image,cover_url,cuisine,cuisine_en,location,location_en,latitude,longitude,google_maps_url,price_level,phone,whatsapp,working_hours,is_open_now,categories(id,name,name_en,sort_order,items(id,name_ar,name_en,description_ar,description_en,price,image_url,tags,meal_type,is_available)),branches(id,area_id,branch_name_ar,branch_name_en,address_ar,address_en,google_maps_url,latitude,longitude,phone,whatsapp,working_hours,is_open,areas(id,city_id,name_ar,name_en,slug))")
       .eq("id", restaurantId)
-      .maybeSingle();
+      .maybeSingle(),
+      supabase.from("restaurants")
+        .select("service_types,instagram_url,facebook_url,tiktok_url")
+        .eq("id", restaurantId)
+        .maybeSingle(),
+    ]);
 
     if (error) {
       return NextResponse.json({ error: `تعذر تحميل بيانات المطعم: ${error.message}` }, { status: 500 });
@@ -266,7 +294,21 @@ export async function GET(request: NextRequest) {
     if (!restaurant) {
       return NextResponse.json({ error: "المطعم غير موجود." }, { status: 404 });
     }
-    return NextResponse.json({ restaurant });
+    const enhancementColumnsUnavailable =
+      enhancementsResult.error?.code === "42703" &&
+      /service_types|instagram_url|facebook_url|tiktok_url/.test(enhancementsResult.error.message);
+    if (enhancementsResult.error && !enhancementColumnsUnavailable) {
+      return NextResponse.json({ error: `تعذر تحميل بيانات التواصل والخدمات: ${enhancementsResult.error.message}` }, { status: 500 });
+    }
+    return NextResponse.json({
+      restaurant: {
+        ...restaurant,
+        service_types: enhancementsResult.data?.service_types ?? ["dine_in", "takeaway", "delivery"],
+        instagram_url: enhancementsResult.data?.instagram_url ?? null,
+        facebook_url: enhancementsResult.data?.facebook_url ?? null,
+        tiktok_url: enhancementsResult.data?.tiktok_url ?? null,
+      },
+    });
   }
 
   const { data: restaurants, error } = await supabase
@@ -373,6 +415,10 @@ async function createRestaurant(request: NextRequest) {
       longitude: body.longitude ?? null,
       google_maps_url: body.googleMapsUrl?.trim() || null,
       price_level: body.priceLevel,
+      service_types: body.serviceTypes,
+      instagram_url: body.instagramUrl.trim() || null,
+      facebook_url: body.facebookUrl.trim() || null,
+      tiktok_url: body.tiktokUrl.trim() || null,
       phone: body.phones.map((phone) => phone.trim()).filter(Boolean).join(", ") || null,
       whatsapp: body.whatsapp.trim() || null,
       working_hours: body.workingHours,
@@ -580,6 +626,10 @@ async function updateRestaurant(body: RestaurantInput, supabase: ReturnType<type
         longitude: body.longitude ?? null,
         google_maps_url: body.googleMapsUrl?.trim() || null,
         price_level: body.priceLevel,
+        service_types: body.serviceTypes,
+        instagram_url: body.instagramUrl.trim() || null,
+        facebook_url: body.facebookUrl.trim() || null,
+        tiktok_url: body.tiktokUrl.trim() || null,
         phone: body.phones.map((phone) => phone.trim()).filter(Boolean).join(", ") || null,
         whatsapp: body.whatsapp.trim() || null,
         working_hours: body.workingHours,
