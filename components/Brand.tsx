@@ -7,7 +7,8 @@ import type { Locale } from "@/lib/i18n";
 
 export default function Brand({ locale = "ar" }: { locale?: Locale }) {
   const pathname = usePathname();
-  const isRestaurantPage = pathname.split("/").filter(Boolean).length === 1;
+  const pathSegments = pathname.split("/").filter(Boolean);
+  const isRestaurantPage = pathSegments.length === 1 && pathSegments[0] !== "admin";
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#0F172A]">
@@ -15,6 +16,12 @@ export default function Brand({ locale = "ar" }: { locale?: Locale }) {
         {isRestaurantPage ? (
           <Link
             href="/"
+            onClick={(event) => {
+              if (sessionStorage.getItem("menujo-home-scroll")) {
+                event.preventDefault();
+                window.location.assign("/");
+              }
+            }}
             aria-label={locale === "ar" ? "العودة إلى المطاعم" : "Back to restaurants"}
             className="grid h-10 w-10 touch-manipulation shrink-0 place-items-center rounded-full border border-white/10 bg-surface text-ink/80 transition-colors duration-100 active:scale-95 hover:border-turmeric/50 hover:text-turmeric sm:h-11 sm:w-11"
           >

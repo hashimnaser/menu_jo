@@ -13,12 +13,15 @@ export type Database = {
         Row: {
           id: string;
           name: string;
+          name_ar: string | null;
           name_en: string | null;
           slug: string;
           description: string | null;
           description_en: string | null;
           logo: string | null;
+          logo_url: string | null;
           cover_image: string | null;
+          cover_url: string | null;
           rating: number;
           location: string | null;
           location_en: string | null;
@@ -37,12 +40,15 @@ export type Database = {
         Insert: {
           id?: string;
           name: string;
+          name_ar?: string | null;
           name_en?: string | null;
           slug: string;
           description?: string | null;
           description_en?: string | null;
           logo?: string | null;
+          logo_url?: string | null;
           cover_image?: string | null;
+          cover_url?: string | null;
           rating?: number;
           location?: string | null;
           location_en?: string | null;
@@ -61,12 +67,15 @@ export type Database = {
         Update: {
           id?: string;
           name?: string;
+          name_ar?: string | null;
           name_en?: string | null;
           slug?: string;
           description?: string | null;
           description_en?: string | null;
           logo?: string | null;
+          logo_url?: string | null;
           cover_image?: string | null;
+          cover_url?: string | null;
           rating?: number;
           location?: string | null;
           location_en?: string | null;
@@ -82,7 +91,15 @@ export type Database = {
           is_open_now?: boolean;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "branches_restaurant_id_fkey";
+            columns: ["id"];
+            isOneToOne: false;
+            referencedRelation: "branches";
+            referencedColumns: ["restaurant_id"];
+          },
+        ];
       };
       categories: {
         Row: {
@@ -90,6 +107,7 @@ export type Database = {
           name: string;
           name_en: string | null;
           restaurant_id: string;
+          sort_order: number;
           created_at: string;
         };
         Insert: {
@@ -97,6 +115,7 @@ export type Database = {
           name: string;
           name_en?: string | null;
           restaurant_id: string;
+          sort_order?: number;
           created_at?: string;
         };
         Update: {
@@ -104,6 +123,7 @@ export type Database = {
           name?: string;
           name_en?: string | null;
           restaurant_id?: string;
+          sort_order?: number;
           created_at?: string;
         };
         Relationships: [
@@ -113,6 +133,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "restaurants";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "items_category_id_fkey";
+            columns: ["id"];
+            isOneToOne: false;
+            referencedRelation: "items";
+            referencedColumns: ["category_id"];
           },
         ];
       };
@@ -126,6 +153,7 @@ export type Database = {
           price: number;
           image: string | null;
           tags: string[];
+          meal_type: string;
           is_available: boolean;
           category_id: string;
           created_at: string;
@@ -139,6 +167,7 @@ export type Database = {
           price: number;
           image?: string | null;
           tags?: string[];
+          meal_type?: string;
           is_available?: boolean;
           category_id: string;
           created_at?: string;
@@ -152,6 +181,7 @@ export type Database = {
           price?: number;
           image?: string | null;
           tags?: string[];
+          meal_type?: string;
           is_available?: boolean;
           category_id?: string;
           created_at?: string;
@@ -165,6 +195,73 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      cities: {
+        Row: { id: string; name_ar: string; name_en: string | null; slug: string; created_at: string };
+        Insert: { id?: string; name_ar: string; name_en?: string | null; slug: string; created_at?: string };
+        Update: { id?: string; name_ar?: string; name_en?: string | null; slug?: string; created_at?: string };
+        Relationships: [];
+      };
+      areas: {
+        Row: { id: string; city_id: string; name_ar: string; name_en: string | null; slug: string; created_at: string };
+        Insert: { id?: string; city_id: string; name_ar: string; name_en?: string | null; slug: string; created_at?: string };
+        Update: { id?: string; city_id?: string; name_ar?: string; name_en?: string | null; slug?: string; created_at?: string };
+        Relationships: [
+          {
+            foreignKeyName: "areas_city_id_fkey";
+            columns: ["city_id"];
+            isOneToOne: false;
+            referencedRelation: "cities";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      branches: {
+        Row: {
+          id: string; restaurant_id: string; area_id: string; branch_name_ar: string; branch_name_en: string | null;
+          address_ar: string | null; address_en: string | null; google_maps_url: string | null;
+          latitude: number | null; longitude: number | null; phone: string | null; whatsapp: string | null;
+          working_hours: Json; is_open: boolean; created_at: string;
+        };
+        Insert: {
+          id?: string; restaurant_id: string; area_id: string; branch_name_ar: string; branch_name_en?: string | null;
+          address_ar?: string | null; address_en?: string | null; google_maps_url?: string | null;
+          latitude?: number | null; longitude?: number | null; phone?: string | null; whatsapp?: string | null;
+          working_hours?: Json; is_open?: boolean; created_at?: string;
+        };
+        Update: {
+          id?: string; restaurant_id?: string; area_id?: string; branch_name_ar?: string; branch_name_en?: string | null;
+          address_ar?: string | null; address_en?: string | null; google_maps_url?: string | null;
+          latitude?: number | null; longitude?: number | null; phone?: string | null; whatsapp?: string | null;
+          working_hours?: Json; is_open?: boolean; created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "branches_area_id_fkey";
+            columns: ["area_id"];
+            isOneToOne: false;
+            referencedRelation: "areas";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      items: {
+        Row: {
+          id: string; category_id: string; name_ar: string; name_en: string | null; price: number;
+          image_url: string | null; tags: string[]; description_ar: string | null; description_en: string | null;
+          meal_type: string; is_available: boolean; created_at: string;
+        };
+        Insert: {
+          id?: string; category_id: string; name_ar: string; name_en?: string | null; price: number;
+          image_url?: string | null; tags?: string[]; description_ar?: string | null; description_en?: string | null;
+          meal_type: string; is_available?: boolean; created_at?: string;
+        };
+        Update: {
+          id?: string; category_id?: string; name_ar?: string; name_en?: string | null; price?: number;
+          image_url?: string | null; tags?: string[]; description_ar?: string | null; description_en?: string | null;
+          meal_type?: string; is_available?: boolean; created_at?: string;
+        };
+        Relationships: [];
       };
       reviews: {
         Row: {

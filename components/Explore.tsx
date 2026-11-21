@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { Restaurant } from "@/lib/data";
@@ -14,6 +14,45 @@ const RestaurantMap = dynamic(() => import("@/components/RestaurantMap"), {
   ),
 });
 
+const browseCategories = [
+  {
+    id: "fast-food",
+    ar: "وجبات سريعة",
+    en: "Fast food",
+    keywords: ["شاورما", "سندويش", "ساندويش", "برغر", "برجر", "بروستد", "زنجر", "shawarma", "sandwich", "burger", "broasted", "zinger"],
+  },
+  {
+    id: "grills-arabic",
+    ar: "مشاوي وأكلات عربية",
+    en: "Grills & Arabic",
+    keywords: ["مشاوي", "مشوي", "كباب", "شيش", "منسف", "مقلوبة", "كبسة", "مندي", "مظبي", "grill", "kebab", "mansaf", "maqluba", "kabsa", "mandi"],
+  },
+  {
+    id: "pizza-pastries",
+    ar: "بيتزا ومعجنات",
+    en: "Pizza & pastries",
+    keywords: ["بيتزا", "معجنات", "فطائر", "مناقيش", "pizza", "pastries", "pies", "manakish"],
+  },
+  {
+    id: "main-dishes",
+    ar: "أطباق رئيسية",
+    en: "Main dishes",
+    keywords: ["طبق رئيسي", "وجبات", "وجبة", "دجاج", "لحوم", "سمك", "مأكولات بحرية", "باستا", "أرز", "main dish", "meals", "chicken", "meat", "fish", "seafood", "pasta", "rice"],
+  },
+  {
+    id: "starters-salads",
+    ar: "مقبلات وسلطات",
+    en: "Starters & salads",
+    keywords: ["مقبلات", "سلطة", "سلطات", "حمص", "متبل", "بطاطا", "appetizer", "starter", "salad", "hummus", "fries"],
+  },
+  {
+    id: "sweets-drinks",
+    ar: "حلويات ومشروبات",
+    en: "Sweets & drinks",
+    keywords: ["حلويات", "حلو", "كنافة", "كيك", "مشروبات", "عصير", "قهوة", "شاي", "dessert", "sweets", "kunafa", "cake", "drinks", "juice", "coffee", "tea"],
+  },
+] as const;
+
 export default function Explore({
   restaurants,
   coordinatesAvailable,
@@ -24,13 +63,56 @@ export default function Explore({
   locale: Locale;
 }) {
   const [q, setQ] = useState("");
-  const [cuisine, setCuisine] = useState<string | null>(null);
+  const [browseCategory, setBrowseCategory] = useState<string | null>(null);
+  const browseDragStart = useRef<{ x: number; scrollLeft: number; pointerId: number; moved: boolean } | null>(null);
+  const suppressBrowseClick = useRef(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "error">("idle");
   const [locationMessage, setLocationMessage] = useState("");
   const [locationRequested, setLocationRequested] = useState(false);
 
-  const cuisines = useMemo(() => Array.from(new Set(restaurants.flatMap((r) => r.cuisine))), [restaurants]);
+  useEffect(() => {
+    const storageKey = "menujo-home-scroll";
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+
+    const restoreHomeScroll = () => {
+      try {
+        const saved = sessionStorage.getItem(storageKey);
+        if (!saved) return;
+        const { scrollY, cardTop, cardViewportTop } = JSON.parse(saved) as {
+          scrollY?: number;
+          cardTop?: number;
+          cardViewportTop?: number;
+        };
+        if (typeof scrollY !== "number") return;
+
+        const target =
+          typeof cardTop === "number" && typeof cardViewportTop === "number"
+            ? cardTop - cardViewportTop
+            : scrollY;
+
+        const restore = () => window.scrollTo({ top: target, behavior: "auto" });
+        window.requestAnimationFrame(restore);
+        const restoreTimer = window.setInterval(restore, 100);
+        window.setTimeout(() => {
+          window.clearInterval(restoreTimer);
+          sessionStorage.removeItem(storageKey);
+        }, 2500);
+      } catch {
+        sessionStorage.removeItem(storageKey);
+      }
+    };
+
+    restoreHomeScroll();
+    window.addEventListener("popstate", restoreHomeScroll);
+    window.addEventListener("menujo:restore-home-scroll", restoreHomeScroll);
+    return () => {
+      window.removeEventListener("popstate", restoreHomeScroll);
+      window.removeEventListener("menujo:restore-home-scroll", restoreHomeScroll);
+      window.history.scrollRestoration = previousScrollRestoration;
+    };
+  }, []);
 
   const searchableRestaurants = useMemo(
     () =>
@@ -38,10 +120,17 @@ export default function Explore({
         restaurant,
         searchText: norm([
           restaurant.name,
+          restaurant.nameEn,
           restaurant.tagline,
+          restaurant.taglineEn,
           restaurant.city,
           ...restaurant.cuisine,
-          ...restaurant.categories.flatMap((category) => category.items.map((item) => item.name)),
+          ...(restaurant.cuisineEn ?? []),
+          ...restaurant.categories.flatMap((category) => [
+            category.title,
+            category.titleEn,
+            ...category.items.flatMap((item) => [item.name, item.nameEn, item.desc, item.descEn]),
+          ]),
         ].join(" ")),
       })),
     [restaurants],
@@ -50,7 +139,7 @@ export default function Explore({
   const list = useMemo(() => {
     const n = norm(q);
     const filtered = searchableRestaurants.filter(({ restaurant, searchText }) =>
-      (!cuisine || restaurant.cuisine.includes(cuisine)) && (!n || searchText.includes(n)),
+      (!browseCategory || matchesBrowseCategory(browseCategory, searchText)) && (!n || searchText.includes(n)),
     );
 
     const withDistances = filtered.map(({ restaurant }) => ({
@@ -67,7 +156,7 @@ export default function Explore({
     }
 
     return withDistances;
-  }, [q, cuisine, searchableRestaurants, userLocation]);
+  }, [q, browseCategory, searchableRestaurants, userLocation]);
   const nearestRestaurantSlug = userLocation
     ? list.find(({ distance }) => distance !== null)?.restaurant.slug
     : undefined;
@@ -122,7 +211,7 @@ export default function Explore({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           type="search"
-          placeholder={locale === "ar" ? "شو نفسك تاكل؟ ابحث عن مطعم أو وجبة" : "What are you craving? Search restaurants or dishes"}
+          placeholder={locale === "ar" ? "ابحث عن مطعم" : "Search for a restaurant"}
           aria-label={locale === "ar" ? "ابحث عن مطعم أو وجبة" : "Search restaurants or dishes"}
           className="min-w-0 flex-1 bg-transparent py-3 text-base text-ink outline-none placeholder:text-ink/40 sm:text-lg"
         />
@@ -133,29 +222,72 @@ export default function Explore({
         )}
       </label>
 
-      <div className="mt-5 flex flex-wrap items-center gap-2" aria-label={locale === "ar" ? "تصفية حسب نوع المطبخ" : "Filter by cuisine"}>
-        <span className="me-1 text-sm font-medium text-ink/55">{locale === "ar" ? "تصفّح حسب:" : "Browse by:"}</span>
-        {[null, ...cuisines].map((c) => (
-          <button
-            key={c ?? "all"}
-            onClick={() => setCuisine(c)}
-            aria-pressed={cuisine === c}
-            className={`touch-manipulation rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-100 active:scale-95 ${
-              cuisine === c ? "bg-turmeric text-paper shadow-md shadow-black/20" : "bg-surface text-ink/70 ring-1 ring-ink/10 hover:-translate-y-0.5 hover:ring-turmeric/40"
-            }`}
-          >
-            {c ?? (locale === "ar" ? "الكل" : "All")}
-          </button>
-        ))}
+      <div className="mt-5 flex min-w-0 items-center gap-3">
+        <p className="shrink-0 text-sm font-medium text-ink/55">{locale === "ar" ? "تصفّح حسب:" : "Browse by:"}</p>
+        <div
+          role="group"
+          aria-label={locale === "ar" ? "تصفية حسب فئة الطعام" : "Filter by food category"}
+          tabIndex={0}
+          className="browse-category-scroll min-w-0 flex-1 touch-pan-x flex gap-2 overflow-x-auto overscroll-x-contain py-1"
+          onPointerDown={(event) => {
+            if (event.pointerType === "touch" || event.button !== 0) return;
+            browseDragStart.current = {
+              x: event.clientX,
+              scrollLeft: event.currentTarget.scrollLeft,
+              pointerId: event.pointerId,
+              moved: false,
+            };
+          }}
+          onPointerMove={(event) => {
+            const drag = browseDragStart.current;
+            if (!drag) return;
+            const delta = event.clientX - drag.x;
+            if (!drag.moved && Math.abs(delta) > 4) {
+              drag.moved = true;
+              event.currentTarget.setPointerCapture(drag.pointerId);
+            }
+            if (drag.moved) event.currentTarget.scrollLeft = drag.scrollLeft - delta;
+          }}
+          onPointerUp={() => {
+            suppressBrowseClick.current = browseDragStart.current?.moved ?? false;
+            browseDragStart.current = null;
+            if (suppressBrowseClick.current) {
+              window.setTimeout(() => {
+                suppressBrowseClick.current = false;
+              }, 0);
+            }
+          }}
+          onPointerCancel={() => {
+            browseDragStart.current = null;
+          }}
+          onClickCapture={(event) => {
+            if (!suppressBrowseClick.current) return;
+            event.preventDefault();
+            event.stopPropagation();
+            suppressBrowseClick.current = false;
+          }}
+        >
+          {[null, ...browseCategories.map((category) => category.id)].map((categoryId) => (
+            <button
+              key={categoryId ?? "all"}
+              onClick={() => setBrowseCategory(categoryId)}
+              aria-pressed={browseCategory === categoryId}
+              className={`shrink-0 touch-manipulation rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-100 active:scale-95 ${
+                browseCategory === categoryId ? "bg-turmeric text-paper shadow-md shadow-black/20" : "bg-surface text-ink/70 ring-1 ring-ink/10 hover:-translate-y-0.5 hover:ring-turmeric/40"
+              }`}
+            >
+              {categoryId === null
+                ? locale === "ar" ? "الكل" : "All"
+                : browseCategories.find((category) => category.id === categoryId)?.[locale === "ar" ? "ar" : "en"]}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div id="nearby" className="mb-4 mt-8 flex flex-wrap items-center justify-between gap-3 scroll-mt-8">
-        <div>
-          <h3 className="font-bold">{userLocation ? (locale === "ar" ? "المطاعم الأقرب إليك" : "Nearest to you") : q || cuisine ? (locale === "ar" ? "نتائج البحث" : "Search results") : (locale === "ar" ? "أماكن تستاهل التجربة" : "Worth a visit")}</h3>
-          <span className="mt-1 block text-sm text-ink/50" aria-live="polite">
-            {userLocation ? (locale === "ar" ? "مرتبة من الأقرب إلى الأبعد" : "Sorted nearest to farthest") : locale === "ar" ? `${list.length} نتيجة` : `${list.length} results`}
-          </span>
-        </div>
+      <div id="nearby" className="mb-4 mt-6 flex items-center justify-between gap-3 scroll-mt-8">
+        <span className="text-sm text-ink/55" aria-live="polite">
+          {locale === "ar" ? `${list.length} ${list.length === 1 ? "مطعم" : "مطاعم"}` : `${list.length} ${list.length === 1 ? "restaurant" : "restaurants"}`}
+        </span>
         <button
           type="button"
           onClick={requestLocation}
@@ -193,58 +325,65 @@ export default function Explore({
               <li key={r.slug} className="flex flex-col">
                 <Link
                   href={`/${encodeURIComponent(r.slug)}`}
-                  className="restaurant-card group block touch-manipulation h-full overflow-hidden rounded-3xl border border-ink/[0.08] bg-surface shadow-sm shadow-black/20 transition duration-150 active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/35"
+                  onClick={(event) => {
+                    try {
+                      window.history.scrollRestoration = "manual";
+                      const cardRect = event.currentTarget.getBoundingClientRect();
+                      sessionStorage.setItem(
+                        "menujo-home-scroll",
+                        JSON.stringify({
+                          scrollY: window.scrollY,
+                          cardTop: cardRect.top + window.scrollY,
+                          cardViewportTop: cardRect.top,
+                          href: `/${encodeURIComponent(r.slug)}`,
+                        }),
+                      );
+                    } catch {
+                      // Storage can be unavailable in restricted browser contexts.
+                    }
+                  }}
+                  className="restaurant-card group flex h-full touch-manipulation flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 shadow-sm shadow-black/20 transition duration-200 active:scale-[0.99] hover:-translate-y-0.5 hover:border-turmeric/30 hover:shadow-xl hover:shadow-black/30"
                 >
-                  <span className="restaurant-art relative flex h-40 items-center justify-center overflow-hidden">
-                    <span aria-hidden="true" className="absolute -left-10 -top-20 h-48 w-48 rounded-full border-[1.5rem] border-white/[0.06]" />
-                    <span aria-hidden="true" className="absolute -bottom-20 -right-8 h-44 w-44 rounded-full bg-turmeric/[0.08]" />
-                    <span className="relative z-[1] px-5 text-center text-3xl font-bold tracking-tight text-white drop-shadow sm:text-4xl">
-                      {r.name}
-                    </span>
-                    <span className="absolute end-4 top-4 rounded-full bg-paper/85 px-3 py-1 text-xs font-bold text-ink/90 backdrop-blur">
-                      {r.cuisine[0]}
-                    </span>
-                    <span
-                      className="absolute bottom-3 end-4 inline-flex items-center gap-1.5 rounded-full border border-turmeric/35 bg-paper/90 px-3.5 py-2 text-xs font-bold text-ink shadow-lg shadow-black/20 backdrop-blur-md"
-                      aria-label={locale === "ar" ? `التقييم ${r.reviewCount ? r.averageRating?.toFixed(1) : "لا يوجد"} من 5، ${r.reviewCount ?? 0} تقييم` : `Rating ${r.reviewCount ? r.averageRating?.toFixed(1) : "none"} out of 5, ${r.reviewCount ?? 0} reviews`}
-                    >
-                      <span aria-hidden="true" className="text-turmeric">★</span>
-                      <span className="tabular-nums">
-                        {r.reviewCount ? r.averageRating?.toFixed(1) : "—"}
-                      </span>
-                      <span className="font-medium text-ink/60">({r.reviewCount ?? 0})</span>
-                    </span>
-                    {r.slug === nearestRestaurantSlug && (
-                      <span className="absolute start-4 top-4 rounded-full bg-turmeric px-3 py-1 text-xs font-bold text-paper shadow-md">
-                        {locale === "ar" ? "الأقرب إليك" : "Nearest"}
-                      </span>
-                    )}
+                  <span className="restaurant-art relative block h-32 shrink-0 overflow-hidden">
+                    {r.coverImage && <img src={r.coverImage} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />}
                   </span>
-                  <span className="block p-5">
-                    <span className="flex items-start justify-between gap-3">
-                      <span>
-                        <span className="mt-1 block text-sm text-ink/55">{r.tagline}</span>
+                  <span className="flex flex-1 flex-col p-4 sm:p-5">
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="flex min-w-0 items-center gap-3">
+                        {r.logo && <img src={r.logo} alt="" loading="lazy" className="h-11 w-11 shrink-0 rounded-xl border border-white/10 bg-slate-800 object-cover" />}
+                        <span className="min-w-0">
+                          <span className="block truncate font-bold text-white">{r.name}</span>
+                          <span
+                            className="mt-1 inline-flex items-center gap-1 text-xs text-slate-300"
+                            aria-label={locale === "ar" ? `التقييم ${r.reviewCount ? r.averageRating?.toFixed(1) : "لا يوجد"} من 5، ${r.reviewCount ?? 0} تقييم` : `Rating ${r.reviewCount ? r.averageRating?.toFixed(1) : "none"} out of 5, ${r.reviewCount ?? 0} reviews`}
+                          >
+                            <span aria-hidden="true" className="text-turmeric">★</span>
+                            <span className="tabular-nums">{r.reviewCount ? r.averageRating?.toFixed(1) : "—"}</span>
+                            <span className="text-slate-400">({r.reviewCount ?? 0})</span>
+                          </span>
+                        </span>
                       </span>
-                      <span aria-hidden="true" className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-raised text-ink/60 transition group-hover:bg-turmeric group-hover:text-paper">{locale === "ar" ? "←" : "→"}</span>
+                      <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[0.06] text-slate-300 transition group-hover:bg-turmeric group-hover:text-slate-950">{locale === "ar" ? "←" : "→"}</span>
                     </span>
-                    <span className="mt-5 flex items-center justify-between gap-3 border-t border-ink/[0.07] pt-4 text-sm text-ink/55">
-                      <span className="flex items-center gap-1.5">
+                    <span className="mt-3 line-clamp-2 min-h-12 text-sm leading-6 text-slate-300">{r.tagline}</span>
+                    <span className="mt-4 flex items-center justify-between gap-3 border-t border-white/[0.08] pt-3 text-sm text-slate-400">
+                      <span className="flex min-w-0 items-center gap-1.5">
                         <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-current text-sumac">
                           <path d="M10 1.8a6.2 6.2 0 0 0-6.2 6.2c0 4.5 6.2 10.2 6.2 10.2s6.2-5.7 6.2-10.2A6.2 6.2 0 0 0 10 1.8Zm0 8.5a2.3 2.3 0 1 1 0-4.6 2.3 2.3 0 0 1 0 4.6Z" />
                         </svg>
-                        {r.city}
+                        <span className="truncate">{r.city}</span>
                       </span>
-                      <span className="text-start text-xs text-ink/45">{locale === "ar" ? `${itemCount} أصناف` : `${itemCount} items`}</span>
+                      <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-xs">{locale === "ar" ? `${itemCount} أصناف` : `${itemCount} items`}</span>
                     </span>
                     {userLocation && (
-                      <span className="mt-3 flex items-center justify-between rounded-xl bg-surface-raised px-3 py-2.5 text-sm">
-                        <span className="flex items-center gap-2 font-medium text-ink/65">
+                      <span className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-white/[0.05] px-3 py-2.5 text-sm">
+                        <span className="flex items-center gap-2 font-medium text-slate-300">
                           <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-current text-turmeric">
                             <path d="M10 1.8a6.2 6.2 0 0 0-6.2 6.2c0 4.5 6.2 10.2 6.2 10.2s6.2-5.7 6.2-10.2A6.2 6.2 0 0 0 10 1.8Zm0 8.5a2.3 2.3 0 1 1 0-4.6 2.3 2.3 0 0 1 0 4.6Z" />
                           </svg>
                           {locale === "ar" ? "المسافة من موقعك" : "Distance from you"}
                         </span>
-                        <span className="font-bold tabular-nums text-ink">
+                        <span className="shrink-0 font-bold tabular-nums text-white">
                           {distance !== null ? (locale === "ar" ? `${formatDistance(distance, locale)} منك` : `${formatDistance(distance, locale)} away`) : (locale === "ar" ? "الموقع غير محدد" : "Location unavailable")}
                         </span>
                       </span>
@@ -259,14 +398,13 @@ export default function Explore({
         <div className="rounded-3xl border border-dashed border-ink/15 bg-surface/70 px-6 py-14 text-center">
           <span aria-hidden="true" className="text-4xl">🔎</span>
           <p className="mt-3 font-bold">{locale === "ar" ? "ما لقينا نتائج" : "No results found"}</p>
-          <p className="mt-1 text-sm text-ink/55">{locale === "ar" ? "جرّب كلمة ثانية أو غيّر نوع المطبخ." : "Try another search or choose a different cuisine."}</p>
+          <p className="mt-1 text-sm text-ink/55">{locale === "ar" ? "جرّب كلمة ثانية أو اختر فئة طعام مختلفة." : "Try another search or choose a different food category."}</p>
         </div>
       )}
 
       <div className="mt-10">
         <div className="mb-4">
           <h3 className="font-bold">{locale === "ar" ? "المطاعم على الخريطة" : "Restaurants on the map"}</h3>
-          <p className="mt-1 text-sm text-ink/50">{locale === "ar" ? "مواقع المطاعم في إربد" : "Restaurant locations in Irbid"}</p>
         </div>
         <div className="overflow-hidden rounded-3xl border border-ink/10 shadow-lg shadow-black/20">
           <RestaurantMap restaurants={list.map(({ restaurant }) => restaurant)} locale={locale} />
@@ -286,6 +424,13 @@ export default function Explore({
       </div>
     </section>
   );
+}
+
+function matchesBrowseCategory(categoryId: string, searchText: string): boolean {
+  const category = browseCategories.find((candidate) => candidate.id === categoryId);
+  return category
+    ? category.keywords.some((keyword) => searchText.includes(norm(keyword)))
+    : true;
 }
 
 function getDistance(

@@ -1,10 +1,38 @@
-export type Item = { name: string; nameEn?: string | null; desc?: string; descEn?: string | null; price: number };
+export type Item = {
+  name: string;
+  nameEn?: string | null;
+  desc?: string;
+  descEn?: string | null;
+  image?: string | null;
+  price: number;
+  mealType?: string;
+};
 export type Category = { title: string; titleEn?: string | null; items: Item[] };
+export type Branch = {
+  id: string;
+  name: string;
+  nameEn?: string | null;
+  address: string;
+  addressEn?: string | null;
+  area: string;
+  areaEn?: string | null;
+  city: string;
+  cityEn?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  googleMapsUrl?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  workingHours?: unknown;
+  isOpen?: boolean;
+};
 export type Restaurant = {
   id: string;
   slug: string;
   name: string;
   nameEn?: string | null;
+  logo?: string | null;
+  coverImage?: string | null;
   tagline: string;
   taglineEn?: string | null;
   city: string;
@@ -14,6 +42,9 @@ export type Restaurant = {
   latitude?: number | null;
   longitude?: number | null;
   googleMapsUrl?: string | null;
+  area?: string | null;
+  areaEn?: string | null;
+  branches?: Branch[];
   cuisine: string[];
   cuisineEn?: (string | null)[];
   phoneNumbers?: string[];

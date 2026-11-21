@@ -10,10 +10,14 @@ body {
   color: #F8FAFC;
 }
 :focus-visible { outline: 3px solid #F59E0B; outline-offset: 2px; }
+.menu-category-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+.menu-category-scroll::-webkit-scrollbar { display: none; }
+.browse-category-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+.browse-category-scroll::-webkit-scrollbar { display: none; }
 .hero-panel {
   background:
-    radial-gradient(ellipse at 8% 100%, rgba(249, 115, 22, 0.2), transparent 34%),
-    linear-gradient(118deg, #1E293B 0%, #0F172A 68%, #020617 100%);
+    radial-gradient(ellipse at 8% 100%, rgba(245, 158, 11, 0.16), transparent 34%),
+    linear-gradient(118deg, #1E293B 0%, #111827 68%, #020617 100%);
 }
 .hero-orb {
   background: radial-gradient(circle, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.02) 68%, transparent 70%);

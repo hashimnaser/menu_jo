@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { Restaurant } from "@/lib/data";
 import { getRestaurantMapUrl } from "@/lib/google-maps";
 import RestaurantReviews from "@/components/RestaurantReviews";
-import RestaurantActions, { TrackedWhatsAppLink } from "@/components/RestaurantActions";
+import RestaurantMenu from "@/components/RestaurantMenu";
+import RestaurantActions from "@/components/RestaurantActions";
 import { getLocale, localizedValue, type Locale } from "@/lib/i18n";
 
 type Props = { params: { slug: string } };
@@ -18,7 +19,7 @@ async function getRestaurant(slug: string, locale: Locale = "ar"): Promise<Resta
     supabase
       .from("restaurants")
       .select(
-        "id,name,name_en,slug,description,description_en,logo,cover_image,rating,location,location_en,phone,whatsapp,cuisine,cuisine_en,created_at,categories(id,name,name_en,restaurant_id,created_at,menu_items(id,name,name_en,description,description_en,price,image,is_available,category_id,created_at))",
+        "id,name,name_ar,name_en,slug,description,description_en,logo,logo_url,cover_image,cover_url,rating,location,location_en,phone,whatsapp,cuisine,cuisine_en,created_at,categories(id,name,name_en,sort_order,restaurant_id,created_at,items(id,name_ar,name_en,description_ar,description_en,price,image_url,meal_type,is_available,category_id,created_at)),branches(id,branch_name_ar,branch_name_en,address_ar,address_en,latitude,longitude,google_maps_url,phone,whatsapp,working_hours,is_open,area_id,areas(id,name_ar,name_en,slug,city_id,cities(id,name_ar,name_en,slug)))",
       )
       .eq("slug", slug)
       .maybeSingle(),
@@ -41,40 +42,75 @@ async function getRestaurant(slug: string, locale: Locale = "ar"): Promise<Resta
     throw new Error(`Could not load restaurant coordinates "${slug}" from Supabase: ${coordinatesResult.error.message}`);
   }
 
-  const phoneNumbers = (data.phone ?? "")
+  const branchRows = Array.isArray(data.branches)
+    ? data.branches
+    : data.branches
+      ? [data.branches]
+      : [];
+  const primaryBranch = branchRows[0];
+  const area = primaryBranch?.areas;
+  const city = area?.cities;
+  const phoneSource = primaryBranch?.phone ?? data.phone ?? "";
+  const phoneNumbers = phoneSource
     .split(/[,;|/\n]+/)
-    .map((phone) => phone.trim().replace(/^["'\[\]]+|["'\[\]]+$/g, ""))
-    .filter((phone) => /\d/.test(phone));
+    .map((phone: string) => phone.trim().replace(/^["'\[\]]+|["'\[\]]+$/g, ""))
+    .filter((phone: string) => /\d/.test(phone));
 
   return {
     id: data.id,
     slug: data.slug,
     name: localizedValue(locale, data.name, data.name_en),
     nameEn: data.name_en,
+    logo: data.logo_url ?? data.logo,
+    coverImage: data.cover_url ?? data.cover_image,
     tagline: localizedValue(locale, data.description ?? "", data.description_en),
     taglineEn: data.description_en,
-    city: localizedValue(locale, data.location ?? "الأردن", data.location_en),
-    cityEn: data.location_en,
-    latitude: coordinatesResult.data?.latitude ?? null,
-    longitude: coordinatesResult.data?.longitude ?? null,
-    googleMapsUrl: coordinatesResult.data?.google_maps_url ?? null,
+    city: area
+      ? `${localizedValue(locale, city?.name_ar ?? "الأردن", city?.name_en)} - ${localizedValue(locale, area.name_ar, area.name_en)}`
+      : localizedValue(locale, data.location ?? "الأردن", data.location_en),
+    cityEn: city?.name_en ?? data.location_en,
+    area: area?.name_ar ?? null,
+    areaEn: area?.name_en ?? null,
+    latitude: primaryBranch?.latitude ?? coordinatesResult.data?.latitude ?? null,
+    longitude: primaryBranch?.longitude ?? coordinatesResult.data?.longitude ?? null,
+    googleMapsUrl: primaryBranch?.google_maps_url ?? coordinatesResult.data?.google_maps_url ?? null,
+    branches: branchRows.map((branch) => ({
+      id: branch.id,
+      name: localizedValue(locale, branch.branch_name_ar, branch.branch_name_en),
+      nameEn: branch.branch_name_en,
+      address: localizedValue(locale, branch.address_ar ?? "", branch.address_en),
+      addressEn: branch.address_en,
+      area: branch.areas?.name_ar ?? "",
+      areaEn: branch.areas?.name_en,
+      city: branch.areas?.cities?.name_ar ?? "",
+      cityEn: branch.areas?.cities?.name_en,
+      latitude: branch.latitude,
+      longitude: branch.longitude,
+      googleMapsUrl: branch.google_maps_url,
+      phone: branch.phone,
+      whatsapp: branch.whatsapp,
+      workingHours: branch.working_hours,
+      isOpen: branch.is_open,
+    })),
     cuisine: data.cuisine
       ? [localizedValue(locale, data.cuisine, data.cuisine_en)]
       : data.categories.map((category) => localizedValue(locale, category.name, category.name_en)),
     cuisineEn: data.cuisine ? [data.cuisine_en] : data.categories.map((category) => category.name_en),
     phoneNumbers,
-    whatsapp: (data.whatsapp ?? phoneNumbers[0])?.replace(/\D/g, ""),
+    whatsapp: (primaryBranch?.whatsapp ?? data.whatsapp ?? phoneNumbers[0])?.replace(/\D/g, ""),
     categories: data.categories.map((category) => ({
       title: localizedValue(locale, category.name, category.name_en),
       titleEn: category.name_en,
-      items: category.menu_items
+      items: (Array.isArray(category.items) ? category.items : category.items ? [category.items] : [])
         .filter((item) => item.is_available)
         .map((item) => ({
-          name: localizedValue(locale, item.name, item.name_en),
+          name: localizedValue(locale, item.name_ar, item.name_en),
           nameEn: item.name_en,
-          desc: localizedValue(locale, item.description ?? "", item.description_en) || undefined,
+          desc: localizedValue(locale, item.description_ar ?? "", item.description_en) || undefined,
           descEn: item.description_en,
+          image: item.image_url,
           price: item.price,
+          mealType: item.meal_type,
         })),
     })),
   };
@@ -131,28 +167,46 @@ export default async function MenuPage({ params }: Props) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <div className="mx-auto max-w-4xl">
-        <section className="restaurant-header relative mt-3 overflow-hidden rounded-[2rem] px-6 py-9 text-white sm:px-10 sm:py-12">
-          <span aria-hidden="true" className="absolute -left-8 -top-20 h-56 w-56 rounded-full border-[1.75rem] border-white/10" />
-          <span aria-hidden="true" className="absolute bottom-[-5rem] left-[28%] h-40 w-40 rounded-full bg-white/[0.06]" />
-          <div className="relative z-10">
-            <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white/85">
-              {r.cuisine.join(" · ")}
-            </span>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">{r.name}</h1>
-            <p className="mt-2 text-lg text-white/75">{r.tagline}</p>
+        <section className="mt-3 overflow-hidden rounded-[2rem] border border-white/10 bg-surface shadow-xl shadow-black/20">
+          <div className="restaurant-art relative h-40 overflow-hidden sm:h-56">
+            {r.coverImage ? (
+              <img src={r.coverImage} alt="" className="relative z-10 h-full w-full object-cover" />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                {r.logo ? (
+                  <img src={r.logo} alt={r.name} className="h-24 w-24 rounded-3xl border border-white/10 bg-slate-900/60 object-contain p-2 shadow-lg sm:h-32 sm:w-32" />
+                ) : (
+                  <span aria-hidden="true" className="text-6xl opacity-70">🍽️</span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="p-4 sm:p-6">
             <RestaurantActions
               restaurantId={r.id}
               restaurantName={r.name}
               phoneNumbers={r.phoneNumbers ?? []}
+              whatsapp={r.whatsapp}
               locale={locale}
             />
-            <div className="mt-5">
+            <h1 className="mt-5 text-2xl font-bold tracking-tight text-white sm:text-3xl">{r.name}</h1>
+            {r.cuisine.length > 0 && (
+              <span className="mt-4 inline-flex max-w-full rounded-full border border-white/10 bg-slate-900/40 px-3 py-1.5 text-sm text-white/75">
+                {r.cuisine.join(" · ")}
+              </span>
+            )}
+            {r.tagline && (
+              <p className="mt-3 line-clamp-2 max-w-2xl text-sm leading-6 text-white/75 sm:text-base">
+                {r.tagline}
+              </p>
+            )}
+            <div className="mt-4">
               {mapUrl ? (
                 <a
                   href={mapUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-white/75 transition hover:text-turmeric hover:underline hover:underline-offset-4"
+                  className="inline-flex items-center gap-2 text-sm text-white/70 transition hover:text-turmeric hover:underline hover:underline-offset-4"
                   aria-label={locale === "ar" ? `عرض موقع ${r.name} على خرائط Google` : `View ${r.name} on Google Maps`}
                 >
                   <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 shrink-0 fill-current">
@@ -162,7 +216,7 @@ export default async function MenuPage({ params }: Props) {
                   <span aria-hidden="true" className="text-xs">↗</span>
                 </a>
               ) : (
-                <p className="inline-flex items-center gap-2 text-sm text-white/75">
+                <p className="inline-flex items-center gap-2 text-sm text-white/70">
                   <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-current">
                     <path d="M10 1.8a6.2 6.2 0 0 0-6.2 6.2c0 4.5 6.2 10.2 6.2 10.2s6.2-5.7 6.2-10.2A6.2 6.2 0 0 0 10 1.8Zm0 8.5a2.3 2.3 0 1 1 0-4.6 2.3 2.3 0 0 1 0 4.6Z" />
                   </svg>
@@ -171,50 +225,11 @@ export default async function MenuPage({ params }: Props) {
               )}
             </div>
           </div>
-          <span aria-hidden="true" className="absolute bottom-2 left-8 hidden text-8xl opacity-70 sm:block">🍽️</span>
         </section>
 
-        <nav aria-label={locale === "ar" ? "أقسام المنيو" : "Menu sections"} className="sticky top-0 z-10 -mx-5 mt-5 flex gap-2 overflow-x-auto bg-paper/95 px-5 py-3 backdrop-blur-xl sm:-mx-0 sm:px-0">
-          {r.categories.map((c, i) => (
-            <a key={c.title} href={`#c${i}`} className="shrink-0 rounded-full border border-ink/10 bg-surface px-4 py-2 text-sm font-semibold text-ink/70 shadow-sm transition hover:border-turmeric/50 hover:text-ink">
-              {c.title}
-            </a>
-          ))}
-        </nav>
-
-        <div className="mt-7 grid gap-5 sm:grid-cols-2">
-          {r.categories.map((c, i) => (
-            <section key={c.title} id={`c${i}`} className="scroll-mt-24 overflow-hidden rounded-3xl border border-ink/[0.08] bg-surface p-5 shadow-sm shadow-black/20 sm:p-6">
-              <div className="mb-3 flex items-center justify-between border-b border-ink/[0.07] pb-4">
-                <h2 className="text-xl font-bold">{c.title}</h2>
-                <span className="rounded-full bg-surface-raised px-2.5 py-1 text-xs font-medium text-ink/70">{locale === "ar" ? `${c.items.length} أصناف` : `${c.items.length} items`}</span>
-              </div>
-              <ul className="divide-y divide-ink/[0.07]">
-                {c.items.map((it) => (
-                  <li key={it.name} className="flex items-start justify-between gap-4 py-4 last:pb-1">
-                    <div>
-                      <p className="font-semibold">{it.name}</p>
-                      {it.desc && <p className="mt-1 text-sm leading-6 text-ink/55">{it.desc}</p>}
-                    </div>
-                    <p className="shrink-0 rounded-xl bg-turmeric/15 px-3 py-1.5 text-sm font-bold tabular-nums text-turmeric">
-                      {it.price.toFixed(2)} <span className="text-xs font-medium">{locale === "ar" ? "د.أ" : "JOD"}</span>
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
+        <RestaurantMenu categories={r.categories} locale={locale} />
 
         <RestaurantReviews restaurantId={r.id} locale={locale} />
-
-        {r.whatsapp && (
-          <TrackedWhatsAppLink
-            restaurantId={r.id}
-            whatsapp={r.whatsapp}
-            locale={locale}
-          />
-        )}
       </div>
     </main>
   );
