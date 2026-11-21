@@ -186,11 +186,13 @@ select
     when mi.name_ar ilike '%بروستد%' then 'بروستد'
     when mi.name_ar ilike '%مناقيش%' or mi.name_ar ilike '%منقوش%' then 'مناقيش'
     when mi.name_ar ilike '%مشاوي%' or mi.name_ar ilike '%تكة%' or mi.name_ar ilike '%شيش%' then 'مشاوي'
+    when mi.name_ar ilike '%زنجر%' then 'برغر دجاج'
     when mi.name_ar ilike '%برغر%' or mi.name_ar ilike '%برجر%' then
       case
         when mi.name_ar ilike '%دجاج%' or mi.name_ar ilike '%فراخ%' then 'برغر دجاج'
         else 'برغر لحم'
       end
+    when mi.name_ar ilike '%عربي%' or mi.name_ar ilike '%حلبي%' or mi.name_ar ilike '%فرنسي%' or mi.name_ar ilike '%إيطالي%' or mi.name_ar ilike '%شاورمجي%' then 'ساندويتش شاورما'
     when mi.name_ar ilike '%شاورما%' then
       case
         when mi.name_ar ilike '%دجاج%' and mi.name_ar ilike '%عربي%' then 'شاورما دجاج عربي'
