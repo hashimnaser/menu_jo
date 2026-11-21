@@ -294,16 +294,13 @@ export async function GET(request: NextRequest) {
     if (!restaurant) {
       return NextResponse.json({ error: "المطعم غير موجود." }, { status: 404 });
     }
-    const enhancementColumnsUnavailable =
-      enhancementsResult.error?.code === "42703" &&
-      /service_types|instagram_url|facebook_url|tiktok_url/.test(enhancementsResult.error.message);
-    if (enhancementsResult.error && !enhancementColumnsUnavailable) {
+    if (enhancementsResult.error) {
       return NextResponse.json({ error: `تعذر تحميل بيانات التواصل والخدمات: ${enhancementsResult.error.message}` }, { status: 500 });
     }
     return NextResponse.json({
       restaurant: {
         ...restaurant,
-        service_types: enhancementsResult.data?.service_types ?? ["dine_in", "takeaway", "delivery"],
+        service_types: enhancementsResult.data?.service_types ?? [],
         instagram_url: enhancementsResult.data?.instagram_url ?? null,
         facebook_url: enhancementsResult.data?.facebook_url ?? null,
         tiktok_url: enhancementsResult.data?.tiktok_url ?? null,

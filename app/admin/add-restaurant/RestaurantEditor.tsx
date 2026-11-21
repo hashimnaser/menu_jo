@@ -263,7 +263,7 @@ export default function RestaurantEditor({
           facebookUrl: restaurant.facebook_url ?? "",
           tiktokUrl: restaurant.tiktok_url ?? "",
         });
-        setServiceTypes(restaurant.service_types ?? ["dine_in", "takeaway", "delivery"]);
+        setServiceTypes(restaurant.service_types ?? []);
         const phones = (restaurant.phone ?? "").split(/[,;|/\n]+/).map((phone) => phone.trim()).filter(Boolean);
         setPhones(phones.length ? phones : [""]);
         setHours(

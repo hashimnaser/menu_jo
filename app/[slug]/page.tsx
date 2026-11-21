@@ -58,10 +58,7 @@ async function getRestaurant(slug: string, locale: Locale = "ar"): Promise<Resta
   }
   if (!data) return null;
 
-  const enhancementColumnsUnavailable =
-    enhancementsResult.error?.code === "42703" &&
-    /service_types|instagram_url|facebook_url|tiktok_url/.test(enhancementsResult.error.message);
-  if (enhancementsResult.error && !enhancementColumnsUnavailable) {
+  if (enhancementsResult.error) {
     throw new Error(`Could not load restaurant enhancements "${slug}" from Supabase: ${enhancementsResult.error.message}`);
   }
 
@@ -129,11 +126,10 @@ async function getRestaurant(slug: string, locale: Locale = "ar"): Promise<Resta
     phoneNumbers,
     whatsapp: (primaryBranch?.whatsapp ?? data.whatsapp ?? phoneNumbers[0])?.replace(/\D/g, ""),
     priceLevel: data.price_level,
-    serviceTypes: enhancementsResult.data?.service_types ??
-      (["zakho", "shawarmaji-hashemi"].includes(data.slug) ? ["dine_in", "takeaway", "delivery"] : []),
-    instagramUrl: enhancementsResult.data?.instagram_url,
-    facebookUrl: enhancementsResult.data?.facebook_url,
-    tiktokUrl: enhancementsResult.data?.tiktok_url,
+    serviceTypes: enhancementsResult.data?.service_types ?? [],
+    instagramUrl: enhancementsResult.data?.instagram_url ?? null,
+    facebookUrl: enhancementsResult.data?.facebook_url ?? null,
+    tiktokUrl: enhancementsResult.data?.tiktok_url ?? null,
     categories: data.categories.map((category) => ({
       title: localizedValue(locale, category.name, category.name_en),
       titleEn: category.name_en,
